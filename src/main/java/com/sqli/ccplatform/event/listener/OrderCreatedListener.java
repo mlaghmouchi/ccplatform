@@ -1,16 +1,17 @@
 package com.sqli.ccplatform.event.listener;
 
-import com.sqli.ccplatform.domain.entity.CustomOrder;
-import com.sqli.ccplatform.domain.entity.PreparationTask;
-import com.sqli.ccplatform.event.model.OrderCreatedEvent;
-//import com.sqli.ccplatform.service.NotificationService;
-import com.sqli.ccplatform.service.PreparationTaskService;
-import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.event.EventListener;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
+
+import com.sqli.ccplatform.domain.entity.CustomOrder;
+import com.sqli.ccplatform.event.model.OrderCreatedEvent;
+import com.sqli.ccplatform.service.PreparationTaskService;
+
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
 @Component
@@ -18,26 +19,23 @@ import org.springframework.transaction.annotation.Transactional;
 public class OrderCreatedListener {
 
     private final PreparationTaskService taskService;
-//    private final NotificationService notificationService;
 
     @Async
     @EventListener
-    @Transactional
     public void handleOrderCreatedEvent(OrderCreatedEvent event) {
-        log.info("Handling OrderCreatedEvent for order ID: {}", event.getOrder().getId());
+        try {
+            CustomOrder order = event.getOrder();
+            createTaskInNewTransaction(order);
+        } catch (Exception e) {
+            log.error("Failed to create preparation task for order {}: {}", 
+                event.getOrder().getId(), e.getMessage());
+            // Don't rethrow - we want to keep the order even if task creation fails
+        }
+    }
 
-        CustomOrder order = event.getOrder();
-
-        // Create preparation task for the order
-        PreparationTask task = taskService.createTaskFromOrder(order);
-
-        // Send notification to customer
-//        notificationService.createNotification(
-//                order.getCustomer(),
-//                "Order Received",
-//                "Your order #" + order.getId() + " has been received and is pending processing."
-//        );
-
-        log.info("Created preparation task ID: {} for order ID: {}", task.getId(), order.getId());
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    protected void createTaskInNewTransaction(CustomOrder order) {
+        taskService.createTaskFromOrder(order);
+        log.info("Successfully created preparation task for order {}", order.getId());
     }
 }

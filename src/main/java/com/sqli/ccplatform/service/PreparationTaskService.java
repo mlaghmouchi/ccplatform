@@ -1,18 +1,21 @@
 package com.sqli.ccplatform.service;
 
+import java.time.LocalDateTime;
+import java.util.List;
+import java.util.Optional;
+
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
 import com.sqli.ccplatform.domain.entity.CustomOrder;
 import com.sqli.ccplatform.domain.entity.Operator;
 import com.sqli.ccplatform.domain.entity.PreparationTask;
 import com.sqli.ccplatform.domain.enums.TaskStatus;
 import com.sqli.ccplatform.repository.OperatorRepository;
 import com.sqli.ccplatform.repository.PreparationTaskRepository;
+
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-import java.time.LocalDateTime;
-import java.util.List;
-import java.util.Optional;
 
 @Slf4j
 @Service
@@ -29,31 +32,33 @@ public class PreparationTaskService {
     public PreparationTask createTaskFromOrder(CustomOrder order) {
         log.info("Creating preparation task for order ID: {}", order.getId());
 
-        PreparationTask task = new PreparationTask();
-        task.setOrder(order);
-        task.setTitle("Prepare Order #" + order.getId() + " - " + order.getTitle());
-        task.setDescription(buildTaskDescription(order));
-        task.setStatus(TaskStatus.TODO);
-        task.setNotes("Task created automatically from order");
-
-        // Try to assign to an available operator
         try {
-            Optional<Operator> availableOperator = findAvailableOperator();
-            if (availableOperator.isPresent()) {
-                task.setOperator(availableOperator.get());
-                log.info("Assigned task to operator: {}", availableOperator.get().getUsername());
-            } else {
-                log.info("No available operator found, task will remain unassigned");
+            PreparationTask task = new PreparationTask();
+            task.setOrder(order);
+            task.setTitle("Prepare Order #" + order.getId());
+            task.setDescription(buildTaskDescription(order));
+            task.setStatus(TaskStatus.TODO);
+            task.setNotes("Task created automatically from order");
+
+            // Try to assign to an available operator
+            try {
+                Optional<Operator> availableOperator = findAvailableOperator();
+                if (availableOperator.isPresent()) {
+                    task.setOperator(availableOperator.get());
+                    log.info("Assigned task to operator: {}", availableOperator.get().getUsername());
+                } else {
+                    log.info("No available operator found, task will remain unassigned");
+                }
+            } catch (Exception e) {
+                log.warn("Error finding available operator: {}", e.getMessage());
+                log.info("Task will remain unassigned due to operator lookup error");
             }
+
+            return taskRepository.save(task);
         } catch (Exception e) {
-            log.warn("Error finding available operator: {}", e.getMessage());
-            log.info("Task will remain unassigned due to operator lookup error");
+            log.error("Failed to create task for order {}: {}", order.getId(), e.getMessage());
+            throw new RuntimeException("Failed to create task: " + e.getMessage(), e);
         }
-
-        PreparationTask savedTask = taskRepository.save(task);
-        log.info("Created preparation task with ID: {}", savedTask.getId());
-
-        return savedTask;
     }
 
     /**
@@ -183,31 +188,27 @@ public class PreparationTaskService {
 
     /**
      * Finds an available operator for task assignment
-     * Fixed to handle potential type conversion issues
      */
     private Optional<Operator> findAvailableOperator() {
-//        try {
-//            // Use explicit type casting to handle the conversion
-//            @SuppressWarnings("unchecked")
-//            List<Operator> availableOperators = (List<Operator>) operatorRepository.findByAvailability(true);
-//
-//            if (availableOperators == null || availableOperators.isEmpty()) {
-//                log.info("No available operators found");
-//                return Optional.empty();
-//            }
-//
-//            // Simple round-robin assignment - get operator with fewer assigned tasks
-//            return availableOperators.stream()
-//                    .min((o1, o2) -> Integer.compare(
-//                            getActiveTaskCount(o1.getId()),
-//                            getActiveTaskCount(o2.getId())
-//                    ));
-//        } catch (Exception e) {
-//            log.error("Error finding available operators: {}", e.getMessage(), e);
-//            return Optional.empty();
-//        }
-            log.info("Operator Founded : {}", operatorRepository.findByUsername("mohamed").isPresent());
-        return operatorRepository.findById(Long.valueOf(0));
+        try {
+            // Find all available operators
+            List<Operator> availableOperators = operatorRepository.findByAvailability(true);
+
+            if (availableOperators == null || availableOperators.isEmpty()) {
+                log.info("No available operators found");
+                return Optional.empty();
+            }
+
+            // Simple round-robin assignment - get operator with fewer assigned tasks
+            return availableOperators.stream()
+                    .min((o1, o2) -> Integer.compare(
+                            getActiveTaskCount(o1.getId()),
+                            getActiveTaskCount(o2.getId())
+                    ));
+        } catch (Exception e) {
+            log.error("Error finding available operators: {}", e.getMessage(), e);
+            return Optional.empty();
+        }
     }
 
     /**
@@ -230,19 +231,18 @@ public class PreparationTaskService {
      */
     private String buildTaskDescription(CustomOrder order) {
         StringBuilder description = new StringBuilder();
-        description.append("Prepare custom order: ").append(order.getTitle()).append("\n");
+        description.append("Order #").append(order.getId()).append(" - ")
+                  .append(order.getTitle()).append("\n")
+                  .append("Price: $").append(order.getPrice());
 
-        if (order.getDescription() != null) {
-            description.append("Order Description: ").append(order.getDescription()).append("\n");
+        if (order.getDescription() != null && !order.getDescription().isEmpty()) {
+            description.append("\nDescription: ").append(order.getDescription());
         }
 
-        description.append("Order Value: $").append(order.getPrice()).append("\n");
-        description.append("Customer: ").append(order.getCustomer().getUsername()).append("\n");
-
         if (order.getSpecifications() != null && !order.getSpecifications().isEmpty()) {
-            description.append("Specifications: ");
+            description.append("\nSpecs: ");
             order.getSpecifications().forEach((key, value) ->
-                    description.append(key).append(": ").append(value).append("; ")
+                description.append(key).append(": ").append(value).append("; ")
             );
         }
 

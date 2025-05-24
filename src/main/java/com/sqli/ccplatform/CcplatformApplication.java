@@ -2,17 +2,11 @@ package com.sqli.ccplatform;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.scheduling.annotation.EnableAsync;
 
-@RestController
 @SpringBootApplication
+@EnableAsync
 public class CcplatformApplication {
-
-	@RequestMapping("/")
-	public String home() {
-		return "Hello, Wordl!";
-	}
 
 	public static void main(String[] args) {
 		SpringApplication.run(CcplatformApplication.class, args);
