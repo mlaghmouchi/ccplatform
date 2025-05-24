@@ -206,7 +206,8 @@ public class PreparationTaskService {
 //            log.error("Error finding available operators: {}", e.getMessage(), e);
 //            return Optional.empty();
 //        }
-        return operatorRepository.findById(0L);
+            log.info("Operator Founded : {}", operatorRepository.findByUsername("mohamed").isPresent());
+        return operatorRepository.findById(Long.valueOf(0));
     }
 
     /**
